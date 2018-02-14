@@ -35,7 +35,6 @@ import os
 import re
 import sys
 import tarfile
-import random # just debugging tasks
 
 from six.moves import urllib
 import tensorflow as tf
@@ -175,7 +174,7 @@ def inputs(eval_data):
     return images, labels
 
 
-def inference(images, task="A"):
+def inference(images):
     """Build the cifar-100 model.
     Args:
       images: Images returned from distorted_inputs() or inputs().
@@ -187,47 +186,25 @@ def inference(images, task="A"):
     # If we only ran this model on a single GPU, we could simplify this function
     # by replacing all instances of tf.get_variable() with tf.Variable().
     #
+    # conv1
+    with tf.variable_scope('conv1') as scope:
+        kernel = _variable_with_weight_decay('weights',
+                                             shape=[5, 5, 3, 64],
+                                             stddev=5e-2,
+                                             wd=0.0)
+        conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
+        pre_activation = tf.nn.bias_add(conv, biases)
+        conv1 = tf.nn.relu(pre_activation, name=scope.name)
+        _activation_summary(conv1)
 
-    tasks = set("AB")
-    task= random.sample(tasks, 1)[0]
-
-    print("TASK == " + task)
-    
-    if task=="A":
-        # conv1
-        with tf.variable_scope('conv1A') as scope:
-            kernel = _variable_with_weight_decay('weights',
-                                                 shape=[5, 5, 3, 64],
-                                                 stddev=5e-2,
-                                                 wd=0.0)
-            conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-            biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
-            pre_activation = tf.nn.bias_add(conv, biases)
-            conv1 = tf.nn.relu(pre_activation, name=scope.name)
-            _activation_summary(conv1)
-
-    elif task=="B":
-        # conv1
-        with tf.variable_scope('conv1B') as scope:
-            kernel = _variable_with_weight_decay('weights',
-                                                 shape=[5, 5, 3, 64],
-                                                 stddev=5e-2,
-                                                 wd=0.0)
-            conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-            biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
-            pre_activation = tf.nn.bias_add(conv, biases)
-            conv1 = tf.nn.relu(pre_activation, name=scope.name)
-            _activation_summary(conv1)
-
-
-            
     # pool1
     pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1],
                            padding='SAME', name='pool1')
     # norm1
     norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
                       name='norm1')
-    
+
     # conv2
     with tf.variable_scope('conv2') as scope:
         kernel = _variable_with_weight_decay('weights',
@@ -239,14 +216,14 @@ def inference(images, task="A"):
         pre_activation = tf.nn.bias_add(conv, biases)
         conv2 = tf.nn.relu(pre_activation, name=scope.name)
         _activation_summary(conv2)
-        
+
     # norm2
     norm2 = tf.nn.lrn(conv2, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
                       name='norm2')
     # pool2
     pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
                            strides=[1, 2, 2, 1], padding='SAME', name='pool2')
-    
+
     # local3
     with tf.variable_scope('local3') as scope:
         # Move everything into depth so we can perform a single matrix multiply.
@@ -259,7 +236,7 @@ def inference(images, task="A"):
         local3 = tf.nn.relu(tf.matmul(reshape, weights) +
                             biases, name=scope.name)
         _activation_summary(local3)
-        
+
     # extra hidden 1
     with tf.variable_scope('hidden1') as scope:
         # Move everything into depth so we can perform a single matrix multiply.
@@ -270,7 +247,7 @@ def inference(images, task="A"):
         hidden1 = tf.nn.relu(tf.matmul(local3, weights) +
                              biases, name=scope.name)
         _activation_summary(hidden1)
-        
+
     # extra hidden 2
     with tf.variable_scope('hidden2') as scope:
         # Move everything into depth so we can perform a single matrix multiply.
@@ -281,7 +258,7 @@ def inference(images, task="A"):
         hidden2 = tf.nn.relu(tf.matmul(hidden1, weights) +
                              biases, name=scope.name)
         _activation_summary(hidden2)
-        
+
     # extra hidden 3
     with tf.variable_scope('hidden3') as scope:
         # Move everything into depth so we can perform a single matrix multiply.
@@ -292,7 +269,7 @@ def inference(images, task="A"):
         hidden3 = tf.nn.relu(tf.matmul(hidden2, weights) +
                              biases, name=scope.name)
         _activation_summary(hidden3)
-        
+
     # extra hidden 4
     with tf.variable_scope('hidden4') as scope:
         # Move everything into depth so we can perform a single matrix multiply.
@@ -303,44 +280,319 @@ def inference(images, task="A"):
         hidden4 = tf.nn.relu(tf.matmul(hidden3, weights) +
                              biases, name=scope.name)
         _activation_summary(hidden4)
-        
-        
+
+        # extra hidden 5
+    with tf.variable_scope('hidden5') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden5 = tf.nn.relu(tf.matmul(hidden4, weights) +
+                             biases, name=scope.name)
+        _activation_summary(hidden5)
+
+    # extra hidden 6
+    with tf.variable_scope('hidden6') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden6 = tf.nn.relu(tf.matmul(hidden5, weights) +
+                             biases, name=scope.name)
+        _activation_summary(hidden6)
+
+    # extra hidden 7
+    with tf.variable_scope('hidden7') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden7 = tf.nn.relu(tf.matmul(hidden6, weights) +
+                             biases, name=scope.name)
+        _activation_summary(hidden7)
+
+    # extra hidden 8
+    with tf.variable_scope('hidden8') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden8 = tf.nn.relu(tf.matmul(hidden7, weights) +
+                             biases, name=scope.name)
+        _activation_summary(hidden8)
+
+        # extra hidden 9
+    with tf.variable_scope('hidden9') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden9 = tf.nn.relu(tf.matmul(hidden8, weights) +
+                             biases, name=scope.name)
+        _activation_summary(hidden9)
+
+    # extra hidden 10
+    with tf.variable_scope('hidden10') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden10 = tf.nn.relu(
+            tf.matmul(hidden9, weights) + biases, name=scope.name)
+        _activation_summary(hidden10)
+
+    # extra hidden 11
+    with tf.variable_scope('hidden11') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden11 = tf.nn.relu(
+            tf.matmul(hidden10, weights) + biases, name=scope.name)
+        _activation_summary(hidden11)
+
+    # extra hidden 12
+    with tf.variable_scope('hidden12') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden12 = tf.nn.relu(
+            tf.matmul(hidden11, weights) + biases, name=scope.name)
+        _activation_summary(hidden12)
+
+    # extra hidden 13
+    with tf.variable_scope('hidden13') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden13 = tf.nn.relu(
+            tf.matmul(hidden12, weights) + biases, name=scope.name)
+        _activation_summary(hidden13)
+
+    # extra hidden 14
+    with tf.variable_scope('hidden14') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden14 = tf.nn.relu(
+            tf.matmul(hidden13, weights) + biases, name=scope.name)
+        _activation_summary(hidden14)
+
+    # extra hidden 15
+    with tf.variable_scope('hidden15') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden15 = tf.nn.relu(
+            tf.matmul(hidden14, weights) + biases, name=scope.name)
+        _activation_summary(hidden15)
+
+    # extra hidden 16
+    with tf.variable_scope('hidden16') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden16 = tf.nn.relu(
+            tf.matmul(hidden15, weights) + biases, name=scope.name)
+        _activation_summary(hidden16)
+
+    # extra hidden 17
+    with tf.variable_scope('hidden17') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden17 = tf.nn.relu(
+            tf.matmul(hidden16, weights) + biases, name=scope.name)
+        _activation_summary(hidden17)
+
+    # extra hidden 18
+    with tf.variable_scope('hidden18') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden18 = tf.nn.relu(
+            tf.matmul(hidden17, weights) + biases, name=scope.name)
+        _activation_summary(hidden18)
+
+    # extra hidden 19
+    with tf.variable_scope('hidden19') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden19 = tf.nn.relu(
+            tf.matmul(hidden18, weights) + biases, name=scope.name)
+        _activation_summary(hidden19)
+
+    # extra hidden 20
+    with tf.variable_scope('hidden20') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden20 = tf.nn.relu(
+            tf.matmul(hidden19, weights) + biases, name=scope.name)
+        _activation_summary(hidden20)
+
+    # extra hidden 21
+    with tf.variable_scope('hidden21') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden21 = tf.nn.relu(
+            tf.matmul(hidden20, weights) + biases, name=scope.name)
+        _activation_summary(hidden21)
+
+    # extra hidden 22
+    with tf.variable_scope('hidden22') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden22 = tf.nn.relu(
+            tf.matmul(hidden21, weights) + biases, name=scope.name)
+        _activation_summary(hidden22)
+
+    # extra hidden 23
+    with tf.variable_scope('hidden23') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden23 = tf.nn.relu(
+            tf.matmul(hidden22, weights) + biases, name=scope.name)
+        _activation_summary(hidden23)
+
+    # extra hidden 24
+    with tf.variable_scope('hidden24') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden24 = tf.nn.relu(
+            tf.matmul(hidden23, weights) + biases, name=scope.name)
+        _activation_summary(hidden24)
+
+    # extra hidden 25
+    with tf.variable_scope('hidden25') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden25 = tf.nn.relu(
+            tf.matmul(hidden24, weights) + biases, name=scope.name)
+        _activation_summary(hidden25)
+
+    # extra hidden 26
+    with tf.variable_scope('hidden26') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden26 = tf.nn.relu(
+            tf.matmul(hidden25, weights) + biases, name=scope.name)
+        _activation_summary(hidden26)
+
+    # extra hidden 27
+    with tf.variable_scope('hidden27') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden27 = tf.nn.relu(
+            tf.matmul(hidden26, weights) + biases, name=scope.name)
+        _activation_summary(hidden27)
+
+    # extra hidden 28
+    with tf.variable_scope('hidden28') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden28 = tf.nn.relu(
+            tf.matmul(hidden27, weights) + biases, name=scope.name)
+        _activation_summary(hidden28)
+
+    # extra hidden 29
+    with tf.variable_scope('hidden29') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden29 = tf.nn.relu(
+            tf.matmul(hidden28, weights) + biases, name=scope.name)
+        _activation_summary(hidden29)
+
+    # extra hidden 30
+    with tf.variable_scope('hidden30') as scope:
+        # Move everything into depth so we can perform a single matrix multiply.
+        weights = _variable_with_weight_decay('weights', shape=[384, 384],
+                                              stddev=0.04, wd=0.004)
+        biases = _variable_on_cpu(
+            'biases', [384], tf.constant_initializer(0.1))
+        hidden30 = tf.nn.relu(
+            tf.matmul(hidden29, weights) + biases, name=scope.name)
+        _activation_summary(hidden30)
+
     # local4
     with tf.variable_scope('local4') as scope:
         weights = _variable_with_weight_decay('weights', shape=[384, 192],
                                               stddev=0.04, wd=0.004)
         biases = _variable_on_cpu(
             'biases', [192], tf.constant_initializer(0.1))
-        local4 = tf.nn.relu(tf.matmul(hidden4, weights) +
+        local4 = tf.nn.relu(tf.matmul(hidden30, weights) +
                             biases, name=scope.name)
         _activation_summary(local4)
-        
+
     # linear layer(WX + b),
     # We don't apply softmax here because
     # tf.nn.sparse_softmax_cross_entropy_with_logits accepts the unscaled logits
     # and performs the softmax internally for efficiency.
-    if task=="A":
-        with tf.variable_scope('softmax_linearA') as scope:
-            weights = _variable_with_weight_decay('weights', [192, NUM_CLASSES],
-                                                  stddev=1 / 192.0, wd=0.0)
-            biases = _variable_on_cpu('biases', [NUM_CLASSES],tf.constant_initializer(0.0))
-            softmax_linear = tf.add(
-                tf.matmul(local4, weights), biases, name=scope.name)
-            _activation_summary(softmax_linear)
-
-    elif task=="B":
-        with tf.variable_scope('softmax_linearB') as scope:
-            weights = _variable_with_weight_decay('weights', [192, NUM_CLASSES],
-                                                  stddev=1 / 192.0, wd=0.0)
-            biases = _variable_on_cpu('biases', [NUM_CLASSES],tf.constant_initializer(0.0))
-            softmax_linear = tf.add(
-                tf.matmul(local4, weights), biases, name=scope.name)
-            _activation_summary(softmax_linear)
-            
+    with tf.variable_scope('softmax_linear') as scope:
+        weights = _variable_with_weight_decay('weights', [192, NUM_CLASSES],
+                                              stddev=1 / 192.0, wd=0.0)
+        biases = _variable_on_cpu('biases', [NUM_CLASSES],
+                                  tf.constant_initializer(0.0))
+        softmax_linear = tf.add(
+            tf.matmul(local4, weights), biases, name=scope.name)
+        _activation_summary(softmax_linear)
 
     return softmax_linear
-    
-    
+
+
 def loss(logits, labels):
     """Add L2Loss to all the trainable variables.
     Add summary for "Loss" and "Loss/avg".
