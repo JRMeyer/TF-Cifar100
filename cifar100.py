@@ -304,7 +304,6 @@ def inference(images, task="A"):
                              biases, name=scope.name)
         _activation_summary(hidden4)
         
-        
     # local4
     with tf.variable_scope('local4') as scope:
         weights = _variable_with_weight_decay('weights', shape=[384, 192],
