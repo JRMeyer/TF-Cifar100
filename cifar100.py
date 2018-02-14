@@ -175,7 +175,7 @@ def inputs(eval_data):
     return images, labels
 
 
-def inference(images, task="A"):
+def inference(images):
     """Build the cifar-100 model.
     Args:
       images: Images returned from distorted_inputs() or inputs().
@@ -188,36 +188,33 @@ def inference(images, task="A"):
     # by replacing all instances of tf.get_variable() with tf.Variable().
     #
 
-    tasks = set("AB")
-    task= random.sample(tasks, 1)[0]
-
-    print("TASK == " + task)
     
-    if task=="A":
-        # conv1
-        with tf.variable_scope('conv1A') as scope:
-            kernel = _variable_with_weight_decay('weights',
-                                                 shape=[5, 5, 3, 64],
-                                                 stddev=5e-2,
-                                                 wd=0.0)
-            conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-            biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
-            pre_activation = tf.nn.bias_add(conv, biases)
-            conv1 = tf.nn.relu(pre_activation, name=scope.name)
-            _activation_summary(conv1)
+    ### INPUT A ###
+    # conv1
+    with tf.variable_scope('conv1A') as scope:
+        kernel = _variable_with_weight_decay('weights',
+                                             shape=[5, 5, 3, 64],
+                                             stddev=5e-2,
+                                             wd=0.0)
+        conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
+        pre_activation = tf.nn.bias_add(conv, biases)
+        conv1 = tf.nn.relu(pre_activation, name=scope.name)
+        _activation_summary(conv1)
 
-    elif task=="B":
-        # conv1
-        with tf.variable_scope('conv1B') as scope:
-            kernel = _variable_with_weight_decay('weights',
-                                                 shape=[5, 5, 3, 64],
-                                                 stddev=5e-2,
-                                                 wd=0.0)
-            conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-            biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
-            pre_activation = tf.nn.bias_add(conv, biases)
-            conv1 = tf.nn.relu(pre_activation, name=scope.name)
-            _activation_summary(conv1)
+
+    ### INPUT B ###
+    # conv1
+    with tf.variable_scope('conv1B') as scope:
+        kernel = _variable_with_weight_decay('weights',
+                                             shape=[5, 5, 3, 64],
+                                             stddev=5e-2,
+                                             wd=0.0)
+        conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
+        pre_activation = tf.nn.bias_add(conv, biases)
+        conv1 = tf.nn.relu(pre_activation, name=scope.name)
+        _activation_summary(conv1)
 
 
             
@@ -318,26 +315,28 @@ def inference(images, task="A"):
     # We don't apply softmax here because
     # tf.nn.sparse_softmax_cross_entropy_with_logits accepts the unscaled logits
     # and performs the softmax internally for efficiency.
-    if task=="A":
-        with tf.variable_scope('softmax_linearA') as scope:
-            weights = _variable_with_weight_decay('weights', [192, NUM_CLASSES],
-                                                  stddev=1 / 192.0, wd=0.0)
-            biases = _variable_on_cpu('biases', [NUM_CLASSES],tf.constant_initializer(0.0))
-            softmax_linear = tf.add(
-                tf.matmul(local4, weights), biases, name=scope.name)
-            _activation_summary(softmax_linear)
 
-    elif task=="B":
-        with tf.variable_scope('softmax_linearB') as scope:
-            weights = _variable_with_weight_decay('weights', [192, NUM_CLASSES],
-                                                  stddev=1 / 192.0, wd=0.0)
-            biases = _variable_on_cpu('biases', [NUM_CLASSES],tf.constant_initializer(0.0))
-            softmax_linear = tf.add(
-                tf.matmul(local4, weights), biases, name=scope.name)
-            _activation_summary(softmax_linear)
-            
 
-    return softmax_linear
+    ### OUTPUT A ###
+    with tf.variable_scope('softmax_linearA') as scope:
+        weights = _variable_with_weight_decay('weights', [192, NUM_CLASSES],
+                                              stddev=1 / 192.0, wd=0.0)
+        biases = _variable_on_cpu('biases', [NUM_CLASSES],tf.constant_initializer(0.0))
+        softmax_linearA = tf.add(
+            tf.matmul(local4, weights), biases, name=scope.name)
+        _activation_summary(softmax_linearA)
+    
+    ### OUTPUT B ###
+    with tf.variable_scope('softmax_linearB') as scope:
+        weights = _variable_with_weight_decay('weights', [192, NUM_CLASSES],
+                                              stddev=1 / 192.0, wd=0.0)
+        biases = _variable_on_cpu('biases', [NUM_CLASSES],tf.constant_initializer(0.0))
+        softmax_linearB = tf.add(
+            tf.matmul(local4, weights), biases, name=scope.name)
+        _activation_summary(softmax_linearB)
+        
+
+    return (softmax_linearA, softmax_linearB)
     
     
 def loss(logits, labels):

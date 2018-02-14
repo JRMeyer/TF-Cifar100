@@ -67,7 +67,7 @@ def train():
 
         # Build a Graph that computes the logits predictions from the
         # inference model.
-        logits = cifar100.inference(images)
+        logits = cifar100.inference(images)[0]
 
         # Calculate loss.
         loss = cifar100.loss(logits, labels)
@@ -112,6 +112,7 @@ def train():
             config=tf.ConfigProto(
                 log_device_placement=FLAGS.log_device_placement)) as mon_sess:
             while not mon_sess.should_stop():
+                print("another step")
                 mon_sess.run(train_op)
         output.close()
 
