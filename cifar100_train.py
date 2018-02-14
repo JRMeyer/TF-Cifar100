@@ -67,14 +67,17 @@ def train():
 
         # Build a Graph that computes the logits predictions from the
         # inference model.
-        logits = cifar100.inference(images)[0]
+        
+        logitsA,logitsB = cifar100.inference(images)
 
         # Calculate loss.
-        loss = cifar100.loss(logits, labels)
+        lossA = cifar100.loss(logitsA, labels)
+        lossB = cifar100.loss(logitsB, labels)
 
         # Build a Graph that trains the model with one batch of examples and
         # updates the model parameters.
-        train_op = cifar100.train(loss, global_step)
+        train_opA = cifar100.train(lossA, global_step)
+        train_opB = cifar100.train(lossB, global_step)
 
         class _LoggerHook(tf.train.SessionRunHook):
             """Logs loss and runtime."""
@@ -85,7 +88,7 @@ def train():
 
             def before_run(self, run_context):
                 self._step += 1
-                return tf.train.SessionRunArgs(loss)  # Asks for loss value.
+                return tf.train.SessionRunArgs(lossA)  # Asks for loss value.
 
             def after_run(self, run_context, run_values):
                 if self._step % FLAGS.log_frequency == 0:
@@ -107,13 +110,16 @@ def train():
         with tf.train.MonitoredTrainingSession(
             checkpoint_dir=FLAGS.train_dir,
             hooks=[tf.train.StopAtStepHook(last_step=FLAGS.max_steps),
-                   tf.train.NanTensorHook(loss),
+                   tf.train.NanTensorHook(lossA),
+                   tf.train.NanTensorHook(lossB),
                    _LoggerHook()],
             config=tf.ConfigProto(
                 log_device_placement=FLAGS.log_device_placement)) as mon_sess:
             while not mon_sess.should_stop():
-                print("another step")
-                mon_sess.run(train_op)
+                print("stepA")
+                mon_sess.run(train_opA)
+                print("stepB")
+                mon_sess.run(train_opB)
         output.close()
 
 
